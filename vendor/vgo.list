@@ -1,6 +1,8 @@
-MODULE                          VERSION
-github.com/dacjames/persistsql  -
-github.com/davecgh/go-spew      v1.1.0
-github.com/pmezard/go-difflib   v1.0.0
-github.com/stretchr/objx        v0.0.0-20180106011353-facf9a85c22f
-github.com/stretchr/testify     v1.2.2
+MODULE                             VERSION
+github.com/dacjames/persistsql     -
+github.com/davecgh/go-spew         v1.1.0
+github.com/golang-migrate/migrate  v0.0.0-20180221001254-22f249514de9
+github.com/lib/pq                  v0.0.0-20180523175426-90697d60dd84
+github.com/pmezard/go-difflib      v1.0.0
+github.com/stretchr/objx           v0.0.0-20180106011353-facf9a85c22f
+github.com/stretchr/testify        v1.2.2
