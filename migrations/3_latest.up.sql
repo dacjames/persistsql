@@ -41,7 +41,9 @@ insert into ledger.devices(resource_id, name)
 values ('6ffbbdf4-b5e8-420d-901d-0134289ec3b0', 'bob');
 
 insert into ledger.deletes(resource_id)
-values ('6ffbbdf4-b5e8-420d-901d-0134289ec3b0');
+values ('6ffbbdf4-b5e8-420d-901d-0134289ec3b0')
+on conflict (resource_id) do update
+    set deleted_at = now();
 
 insert into ledger.devices(resource_id, name)
 values ('6ffbbdf4-b5e8-420d-901d-0134289ec3b0', 'bob');
