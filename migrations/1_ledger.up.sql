@@ -30,3 +30,28 @@ create table ledger.deletes(
 );
 
 create index deletes_deleted_at on ledger.deletes(deleted_at);
+
+create extension if not exists pg_trgm;
+
+create table ledger.tags(
+    tag_id uuid,
+    key text,
+    value text,
+    unique(key, value),
+    primary key(tag_id)
+);
+
+create index "tags_key" on ledger.tags(key);
+create index "tags_key_value" on ledger.tags
+    using gin((key || '=' || value) gin_trgm_ops);
+
+create table ledger.resource_tags(
+    resource_id uuid,
+    tag_id uuid references ledger.tags,
+    primary key(resource_id, tag_id)
+);
+
+
+
+
+
