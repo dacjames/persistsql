@@ -3,6 +3,7 @@ package test_util
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -51,7 +52,9 @@ func Migrated(t *testing.T, block func(*sql.DB)) func(*sql.DB) {
 		driver, err := postgres.WithInstance(db, &postgres.Config{})
 		require.Nil(t, err)
 
-		m, err := migrate.NewWithDatabaseInstance("file://../../migrations", "postgres", driver)
+		// Safe because GOPATH is always set when running tests
+		gopath := os.Getenv("GOPATH")
+		m, err := migrate.NewWithDatabaseInstance(fmt.Sprintf("file://%s/src/github.com/dacjames/persistsql/migrations", gopath), "postgres", driver)
 		require.Nil(t, err)
 
 		err = m.Up()

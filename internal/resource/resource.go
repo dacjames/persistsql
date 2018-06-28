@@ -3,6 +3,7 @@ package resource
 import (
 	"database/sql/driver"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,9 +17,24 @@ type IDer interface {
 }
 
 type ID ulid.ULID
+type IDs []ID
 
 func (r ID) String() string {
 	return ulid.ULID(r).String()
+}
+
+func (r IDs) String() string {
+	sb := strings.Builder{}
+	sb.WriteString("[")
+	for i, id := range r {
+		sb.WriteString(id.String())
+		if i+1 < len(r) {
+			sb.WriteString(", ")
+		}
+
+	}
+	sb.WriteString("]")
+	return sb.String()
 }
 
 func (r ID) UUID() string {

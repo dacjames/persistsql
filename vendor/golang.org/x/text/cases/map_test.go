@@ -27,6 +27,12 @@ type testCase struct {
 	opts  options
 }
 
+// We don't support the NoFinalSigma option, but we use it to test the
+// underlying lower casers and to be able to compare differences in performance.
+func noFinalSigma(o *options) {
+	o.noFinalSigma = true
+}
+
 var testCases = []testCase{
 	0: {
 		lang:  "und",
@@ -34,7 +40,7 @@ var testCases = []testCase{
 		title: "Abc Abc Abc Abc İsıi Εσάσ",
 		lower: "abc abc abc abc i\u0307sıi εσάσ",
 		upper: "ABC ABC ABC ABC İSII ΕΣΆΣ",
-		opts:  getOpts(HandleFinalSigma(false)),
+		opts:  getOpts(noFinalSigma),
 	},
 
 	1: {
@@ -43,7 +49,6 @@ var testCases = []testCase{
 		title: "Abc Abc Abc Abc İsıi Εσάς Σ _Σ -Σ",
 		lower: "abc abc abc abc i\u0307sıi εσάς σ _σ -σ",
 		upper: "ABC ABC ABC ABC İSII ΕΣΆΣ Σ _Σ -Σ",
-		opts:  getOpts(HandleFinalSigma(true)),
 	},
 
 	2: { // Title cased runes.
@@ -199,29 +204,23 @@ func TestAlloc(t *testing.T) {
 	for i, f := range []func() Caser{
 		func() Caser { return Upper(language.Und) },
 		func() Caser { return Lower(language.Und) },
-		func() Caser { return Lower(language.Und, HandleFinalSigma(false)) },
-		// TODO: use a shared copy for these casers as well, in order of
-		// importance, starting with the most important:
-		// func() Caser { return Title(language.Und) },
-		// func() Caser { return Title(language.Und, HandleFinalSigma(false)) },
+		func() Caser { return Title(language.Und) },
 	} {
-		testtext.Run(t, "", func(t *testing.T) {
-			var c Caser
-			v := testtext.AllocsPerRun(10, func() {
-				c = f()
-			})
-			if v > 0 {
-				// TODO: Right now only Upper has 1 allocation. Special-case Lower
-				// and Title as well to have less allocations for the root locale.
-				t.Errorf("%d:init: number of allocs was %f; want 0", i, v)
-			}
-			v = testtext.AllocsPerRun(2, func() {
-				c.Transform(dst, src, true)
-			})
-			if v > 0 {
-				t.Errorf("%d:transform: number of allocs was %f; want 0", i, v)
-			}
+		var c Caser
+		v := testtext.AllocsPerRun(2, func() {
+			c = f()
 		})
+		if v > 1 {
+			// TODO: Right now only Upper has 1 allocation. Special-case Lower
+			// and Title as well to have less allocations for the root locale.
+			t.Skipf("%d:init: number of allocs was %f; want 0", i, v)
+		}
+		v = testtext.AllocsPerRun(2, func() {
+			c.Transform(dst, src, true)
+		})
+		if v > 0 {
+			t.Errorf("%d:transform: number of allocs was %f; want 0", i, v)
+		}
 	}
 }
 
@@ -255,23 +254,23 @@ func TestHandover(t *testing.T) {
 		first, second string
 	}{{
 		"title/nosigma/single midword",
-		Title(language.Und, HandleFinalSigma(false)),
+		Caser{makeTitle(language.Und, noSigma)},
 		"A.", "a",
 	}, {
 		"title/nosigma/single midword",
-		Title(language.Und, HandleFinalSigma(false)),
+		Caser{makeTitle(language.Und, noSigma)},
 		"A", ".a",
 	}, {
 		"title/nosigma/double midword",
-		Title(language.Und, HandleFinalSigma(false)),
+		Caser{makeTitle(language.Und, noSigma)},
 		"A..", "a",
 	}, {
 		"title/nosigma/double midword",
-		Title(language.Und, HandleFinalSigma(false)),
+		Caser{makeTitle(language.Und, noSigma)},
 		"A.", ".a",
 	}, {
 		"title/nosigma/double midword",
-		Title(language.Und, HandleFinalSigma(false)),
+		Caser{makeTitle(language.Und, noSigma)},
 		"A", "..a",
 	}, {
 		"title/sigma/single midword",
@@ -385,14 +384,14 @@ func init() {
 		want:    "οσ οσσ",
 		dstSize: minBufSize,
 		srcSize: minBufSize,
-		t:       Lower(language.Und, HandleFinalSigma(false)),
+		t:       makeLower(language.Und, noSigma),
 	}, {
 		desc:    "und/title/simple (no final sigma)",
 		src:     "ΟΣ ΟΣΣ",
 		want:    "Οσ Οσσ",
 		dstSize: minBufSize,
 		srcSize: minBufSize,
-		t:       Title(language.Und, HandleFinalSigma(false)),
+		t:       makeTitle(language.Und, noSigma),
 	}, {
 		desc:    "und/title/final sigma: no error",
 		src:     "ΟΣ",
@@ -687,13 +686,13 @@ func TestSpan(t *testing.T) {
 		src:   "ος οσσ",
 		want:  "οσ οσσ",
 		atEOF: true,
-		t:     Lower(language.Und, HandleFinalSigma(false)),
+		t:     Caser{makeLower(language.Und, noSigma)},
 	}, {
 		desc:  "und/title/simple (no final sigma)",
 		src:   "Οσ Οσσ",
 		want:  "Οσ Οσσ",
 		atEOF: true,
-		t:     Title(language.Und, HandleFinalSigma(false)),
+		t:     Caser{makeTitle(language.Und, noSigma)},
 	}, {
 		desc: "und/lower/final sigma: no error",
 		src:  "οΣ", // Oς
@@ -741,7 +740,7 @@ func TestSpan(t *testing.T) {
 		src:   "При",
 		want:  "При",
 		atEOF: true,
-		t:     Title(language.Und, HandleFinalSigma(false)),
+		t:     Caser{makeTitle(language.Und, noSigma)},
 	}, {
 		// Note: the choice to change the final sigma at the end in case of
 		// too many case ignorables is arbitrary. The main reason for this
@@ -885,6 +884,10 @@ const txtNonASCII = txt_vn + txt_cn + txt_ru + txt_gr
 
 // TODO: Improve ASCII performance.
 
+var (
+	noSigma = options{noFinalSigma: true}
+)
+
 func BenchmarkCasers(b *testing.B) {
 	for _, s := range []struct{ name, text string }{
 		{"ascii", txtASCII},
@@ -914,10 +917,10 @@ func BenchmarkCasers(b *testing.B) {
 		}{
 			{"fold/default", Fold()},
 			{"upper/default", Upper(language.Und)},
-			{"lower/sigma", Lower(language.Und)},
-			{"lower/simple", Lower(language.Und, HandleFinalSigma(false))},
-			{"title/sigma", Title(language.Und)},
-			{"title/simple", Title(language.Und, HandleFinalSigma(false))},
+			{"lower/sigma", makeLower(language.Und, options{})},
+			{"lower/simple", makeLower(language.Und, noSigma)},
+			{"title/sigma", makeTitle(language.Und, options{})},
+			{"title/simple", makeTitle(language.Und, noSigma)},
 		} {
 			c := Caser{t.caser}
 			dst := make([]byte, len(src))

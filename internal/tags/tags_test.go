@@ -32,5 +32,17 @@ func TestInsertTags(t *testing.T) {
 			return nil
 		})
 
+		util.WithTransaction(db, func(tx *sql.Tx) error {
+			err := tags.Tagset{}.Insert(tx, rid)
+			require.Nil(t, err)
+			return nil
+		})
+
+		util.WithTransaction(db, func(tx *sql.Tx) error {
+			err := tags.Tagset{}.Insert(tx, rid)
+			require.Nil(t, err)
+			return nil
+		})
+
 	})
 }

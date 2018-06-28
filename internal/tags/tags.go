@@ -68,15 +68,19 @@ func (tt Tagset) Insert(tx *sql.Tx, id resource.ID) error {
 
 	rows.Close()
 
-	rtv := []string{}
+	rtp := []string{}
 	rtf := []interface{}{}
 	ph = util.NewPlaceholders()
 	for _, tid := range tagIDs {
-		rtv = append(rtv, ph.NextValue(2))
+		rtp = append(rtp, ph.NextValue(2))
 		rtf = append(rtf, id, tid)
 	}
 
-	query = `INSERT INTO ledger.resource_tags(resource_id, tag_id) VALUES ` + strings.Join(rtv, ",")
+	query = `
+		INSERT INTO ledger.resource_tags(resource_id, tag_id)
+		VALUES ` + strings.Join(rtp, ",") + `
+		ON CONFLICT (resource_id, tag_id) DO NOTHING
+	`
 
 	_, err = tx.Exec(query, rtf...)
 	if err != nil {

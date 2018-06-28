@@ -13,7 +13,7 @@ create table ledger.resources(
     service_id uuid references ledger.services,
 	created_at timestamp not null default now(),
 	primary key(resource_id)
-);
+) ;
 
 create table ledger.revisions(
     revision_id serial,

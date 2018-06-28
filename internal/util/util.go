@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -41,4 +42,41 @@ func NewPlaceholdersAt(start int) Placeholders {
 func NewRandSource() *rand.Rand {
 	t := time.Now().UTC()
 	return rand.New(rand.NewSource(t.UnixNano()))
+}
+
+func NestedTags(t reflect.Type, key string) []string {
+	if t.Kind() == reflect.Ptr {
+		return NestedTags(t.Elem(), key)
+	}
+
+	values := []string{}
+
+	if t.Kind() != reflect.Struct {
+		return values
+	}
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		if field.Type.Kind() == reflect.Ptr {
+			values = append(values, NestedTags(field.Type.Elem(), key)...)
+			continue
+		}
+
+		if field.Type.Kind() == reflect.Struct {
+			values = append(values, NestedTags(field.Type, key)...)
+			continue
+		}
+
+		// if field.Type.Kind() == reflect.Ptr {
+		// 	field.Type.Elem()
+		// }
+
+		value, ok := field.Tag.Lookup(key)
+		if ok {
+			values = append(values, value)
+		}
+	}
+
+	return values
 }
