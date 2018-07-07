@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,6 +28,14 @@ func (p *placeholders) NextValue(n int) string {
 	parts := make([]string, n)
 	for i := 0; i < n; i++ {
 		parts[i] = p.NextPlaceholder()
+	}
+	return `(` + strings.Join(parts, ", ") + `)`
+}
+
+func PlaceholderValue(n int) string {
+	parts := make([]string, n)
+	for i := 0; i < n; i++ {
+		parts[i] = `$` + strconv.Itoa(i+1)
 	}
 	return `(` + strings.Join(parts, ", ") + `)`
 }

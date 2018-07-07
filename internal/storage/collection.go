@@ -2,54 +2,87 @@ package storage
 
 import (
 	"database/sql"
-	"errors"
+	"database/sql/driver"
+	"strings"
 
-	"github.com/dacjames/persistsql/internal/resource"
+	"github.com/dacjames/persistsql/internal/model"
 	"github.com/dacjames/persistsql/internal/util"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 )
 
-type ServiceImpl interface {
-	ServiceName() string
-	Revise(state Stater, tx *sql.Tx) error
-	ScanRows(rows *sqlx.Rows) (Stater, error)
+type Valueser interface {
+	Values() []driver.NamedValue
 }
 
-type Collection struct {
-	ServiceImpl
-	DB *sql.DB
+type ScanRowser interface {
+	ScanRows(rows *sqlx.Rows) error
 }
 
-func (d *Collection) PutAny(state Stater) error {
+type Revisable interface {
+	Valueser
+	model.Resourcer
+}
 
-	err := util.WithTransaction(d.DB, func(tx *sql.Tx) error {
+type Selectable interface {
+	ScanRowser
+	model.ResourceServicer
+	model.ResourceIDer
+}
+
+type Collection interface {
+	Revise(rev Revisable) error
+	Select(dest Selectable) error
+}
+
+type collection struct {
+	db *sql.DB
+}
+
+func NewCollection(db *sql.DB) Collection {
+	return &collection{db: db}
+}
+
+func (c *collection) Revise(rev Revisable) error {
+	if err := util.WithTransaction(c.db, func(tx *sql.Tx) error {
 		if _, err := tx.Exec(`
 			insert into ledger.resources(resource_id, service_id)
-			values ($1, (select service_id from ledger.services where name='`+d.ServiceName()+`'))
+			values ($1, (select service_id from ledger.services where name='`+rev.ResourceService()+`'))
 			on conflict (resource_id) do nothing
-		`, state.ResourceID()); err != nil {
+		`, rev.ResourceID()); err != nil {
 			return err
 		}
 
-		if err := state.ResourceTags().Insert(tx, state.ResourceID()); err != nil {
+		if err := rev.ResourceTags().Insert(tx, rev.ResourceID()); err != nil {
 			return err
 		}
 
-		if err := d.Revise(state, tx); err != nil {
+		values := rev.Values()
+		names := make([]string, len(values))
+		vv := make([]interface{}, len(values))
+		ph := util.PlaceholderValue(len(values))
+		for i, v := range values {
+			names[i] = v.Name
+			vv[i] = v.Value
+		}
+
+		if _, err := tx.Exec(`
+			insert into ledger.devices(`+strings.Join(names, ",")+`)
+			values `+ph+`
+		`, vv...); err != nil {
 			return err
 		}
+
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (d *Collection) GetAny(id resource.ID) (Stater, error) {
-	dbx := sqlx.NewDb(d.DB, "postgres")
+func (c *collection) Select(dest Selectable) error {
+	dbx := sqlx.NewDb(c.db, "postgres")
 
 	// Unsafe here means that unmatched sql fields will be ignored.
 	// This is useful because we ignore aliased duplicate fields
@@ -60,25 +93,25 @@ func (d *Collection) GetAny(id resource.ID) (Stater, error) {
 			   created_at as "meta.created_at",
 			   updated_at as "meta.updated_at",
 			   d.*
-		from latest.`+d.ServiceName()+` d
+		from latest.`+dest.ResourceService()+` d
 		where resource_id = $1 limit 1
-	`, id)
+	`, dest.ResourceID())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var state Stater
+	found := false
 	for result.Next() {
-		var err error
-		state, err = d.ScanRows(result)
+		found = true
+		err := dest.ScanRows(result)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	if state != nil {
-		return state, nil
+	if !found {
+		return errors.Errorf("Resource ID %s Not Found", dest.ResourceID())
 	}
 
-	return nil, errors.New("Resource ID %s Not Found")
+	return nil
 }

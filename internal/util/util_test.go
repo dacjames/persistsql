@@ -37,6 +37,12 @@ func TestPlaceholdersValue(t *testing.T) {
 	require.Equal(t, "($2, $3, $4)", p.NextValue(3))
 }
 
+func TestPlaceholdersValueFast(t *testing.T) {
+	require.Equal(t, "($1)", util.PlaceholderValue(1))
+	require.Equal(t, "()", util.PlaceholderValue(0))
+	require.Equal(t, "($1, $2, $3)", util.PlaceholderValue(3))
+}
+
 type InnerA struct {
 	X int `db:"x"`
 	Y int

@@ -83,12 +83,7 @@ func TestDeviceStorage(t *testing.T) {
 		var storage interface {
 			storage.Getter
 			storage.Putter
-		} = &storage.Collection{
-			ServiceImpl: &devices.DeviceStorage{
-				DB: db,
-			},
-			DB: db,
-		}
+		} = devices.NewPsql(db)
 
 		err := storage.PutAny(example)
 		require.NoError(t, err)
@@ -107,7 +102,46 @@ func TestDeviceStorage(t *testing.T) {
 		require.Equal(t, example.Name, device.Name)
 
 	})
+}
 
+func TestDeviceStorageCollection(t *testing.T) {
+	require.Equal(t,
+		true, true)
+
+	example := &devices.Device{
+		Resource: resource.Resource{
+			ID: resource.NewID(nil),
+			Meta: resource.Meta{
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+				DeletedAt: time.Time{},
+			},
+			Deleted: false,
+		},
+		Name: "Dummy 🤖",
+		Tags: IthTags(1),
+	}
+	require.NotNil(t, example)
+
+	test_util.WithMigratedDB(t, func(db *sql.DB) {
+		collection := storage.NewCollection(db)
+
+		if err := collection.Revise(example); true {
+			require.NoError(t, err)
+		}
+
+		target := &devices.Device{
+			Resource: resource.Resource{
+				ID: example.ID,
+			},
+		}
+
+		if err := collection.Select(target); true {
+			require.NoError(t, err)
+		}
+
+		require.Equal(t, example.Name, target.Name)
+	})
 }
 
 func TestShouldBeBenchmark(t *testing.T) {
@@ -118,12 +152,7 @@ func TestShouldBeBenchmark(t *testing.T) {
 		var storage interface {
 			storage.Getter
 			storage.Putter
-		} = &storage.Collection{
-			ServiceImpl: &devices.DeviceStorage{
-				DB: db,
-			},
-			DB: db,
-		}
+		} = devices.NewPsql(db)
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 		ids := []resource.ID{}
