@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"os"
 	"testing"
 	"time"
 
@@ -60,9 +61,21 @@ func IthTags(i int) tags.Tagset {
 	}
 }
 
+var db *sql.DB
+
+func TestMain(m *testing.M) {
+	db, _ = test_util.SetupTestDB()
+	mCtx := test_util.Migrate(db)
+
+	code := m.Run()
+
+	mCtx.Teardown()
+
+	os.Exit(code)
+}
+
 func TestDeviceStorage(t *testing.T) {
-	require.Equal(t,
-		true, true)
+	require.Equal(t, true, true)
 
 	example := &devices.Device{
 		Resource: resource.Resource{
@@ -79,29 +92,27 @@ func TestDeviceStorage(t *testing.T) {
 	}
 	require.NotNil(t, example)
 
-	test_util.WithMigratedDB(t, func(db *sql.DB) {
-		var storage interface {
-			storage.Getter
-			storage.Putter
-		} = devices.NewPsql(db)
+	var storage interface {
+		storage.Getter
+		storage.Putter
+	} = devices.NewPsql(db)
 
-		err := storage.PutAny(example)
-		require.NoError(t, err)
+	err := storage.PutAny(example)
+	require.NoError(t, err)
 
-		example.Name = "Happy 🤖"
-		err = storage.PutAny(example)
-		require.NoError(t, err)
+	example.Name = "Happy 🤖"
+	err = storage.PutAny(example)
+	require.NoError(t, err)
 
-		state, err := storage.GetAny(example.ID)
-		require.NoError(t, err)
+	state, err := storage.GetAny(example.ID)
+	require.NoError(t, err)
 
-		device, ok := state.(*devices.Device)
-		require.True(t, ok)
+	device, ok := state.(*devices.Device)
+	require.True(t, ok)
 
-		require.Equal(t, example.ID, device.ID)
-		require.Equal(t, example.Name, device.Name)
+	require.Equal(t, example.ID, device.ID)
+	require.Equal(t, example.Name, device.Name)
 
-	})
 }
 
 func TestDeviceStorageCollection(t *testing.T) {
@@ -123,118 +134,114 @@ func TestDeviceStorageCollection(t *testing.T) {
 	}
 	require.NotNil(t, example)
 
-	test_util.WithMigratedDB(t, func(db *sql.DB) {
-		collection := storage.NewCollection(db)
+	collection := storage.NewCollection(db)
 
-		if err := collection.Revise(example); true {
-			require.NoError(t, err)
-		}
+	if err := collection.Revise(example); true {
+		require.NoError(t, err)
+	}
 
-		target := &devices.Device{
-			Resource: resource.Resource{
-				ID: example.ID,
-			},
-		}
+	target := &devices.Device{
+		Resource: resource.Resource{
+			ID: example.ID,
+		},
+	}
 
-		if err := collection.Select(target); true {
-			require.NoError(t, err)
-		}
+	if err := collection.Select(target); true {
+		require.NoError(t, err)
+	}
 
-		require.Equal(t, example.Name, target.Name)
-	})
+	require.Equal(t, example.Name, target.Name)
 }
 
-func TestShouldBeBenchmark(t *testing.T) {
+func BenchmarkOps(t *testing.B) {
 
 	N := 10000
 
-	test_util.WithMigratedDB(t, func(db *sql.DB) {
-		var storage interface {
-			storage.Getter
-			storage.Putter
-		} = devices.NewPsql(db)
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	var storage interface {
+		storage.Getter
+		storage.Putter
+	} = devices.NewPsql(db)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-		ids := []resource.ID{}
+	ids := []resource.ID{}
 
-		numRevs := 0
-		startTime := time.Now()
+	numRevs := 0
+	startTime := time.Now()
 
-		for i := 0; i < N; i++ {
-			id := resource.NewID(r)
-			ids = append(ids, id)
-			err := storage.PutAny(&devices.Device{
-				Resource: resource.Resource{ID: id},
-				Name:     fmt.Sprintf("Dummy %d", i),
-			})
-			numRevs++
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		afterPuts := time.Now()
-		putTotal := afterPuts.Sub(startTime) / time.Millisecond
-		perPut := float64(putTotal) / float64(len(ids))
-		fmt.Printf("%fms per put after %d revisions over %d resources\n", perPut, numRevs, len(ids))
-
-		rand.Shuffle(len(ids), func(i, j int) {
-			ids[i], ids[j] = ids[j], ids[i]
+	for i := 0; i < N; i++ {
+		id := resource.NewID(r)
+		ids = append(ids, id)
+		err := storage.PutAny(&devices.Device{
+			Resource: resource.Resource{ID: id},
+			Name:     fmt.Sprintf("Dummy %d", i),
 		})
+		numRevs++
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 
-		for i := 0; i < N/10; i++ {
+	afterPuts := time.Now()
+	putTotal := afterPuts.Sub(startTime) / time.Millisecond
+	perPut := float64(putTotal) / float64(len(ids))
+	fmt.Printf("%fms per put after %d revisions over %d resources\n", perPut, numRevs, len(ids))
+
+	rand.Shuffle(len(ids), func(i, j int) {
+		ids[i], ids[j] = ids[j], ids[i]
+	})
+
+	for i := 0; i < N/10; i++ {
+		id := ids[i]
+		err := storage.PutAny(&devices.Device{
+			Resource: resource.Resource{ID: id},
+			Name:     fmt.Sprintf("Modified %d", i),
+		})
+		numRevs++
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	afterUpdates := time.Now()
+	updateTotal := afterUpdates.Sub(afterPuts) / time.Millisecond
+	perUpdate := float64(updateTotal) / float64(len(ids))
+	fmt.Printf("%fms per update after %d revisions over %d resources\n", perUpdate, numRevs, len(ids))
+
+	numHots := 0
+	for i := 0; i < N/100; i++ {
+		for j := 0; j < max(10, N/100); j++ {
 			id := ids[i]
 			err := storage.PutAny(&devices.Device{
 				Resource: resource.Resource{ID: id},
-				Name:     fmt.Sprintf("Modified %d", i),
+				Name:     fmt.Sprintf("Hot %d'th %d", j, i),
 			})
 			numRevs++
+			numHots++
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
+	}
 
-		afterUpdates := time.Now()
-		updateTotal := afterUpdates.Sub(afterPuts) / time.Millisecond
-		perUpdate := float64(updateTotal) / float64(len(ids))
-		fmt.Printf("%fms per update after %d revisions over %d resources\n", perUpdate, numRevs, len(ids))
+	afterHots := time.Now()
+	hotTotal := afterHots.Sub(afterUpdates) / time.Millisecond
+	perHot := float64(hotTotal) / float64(numHots)
+	fmt.Printf("%fms per hot update after %d revisions over %d resources\n", perHot, numRevs, len(ids))
 
-		numHots := 0
-		for i := 0; i < N/100; i++ {
-			for j := 0; j < max(10, N/100); j++ {
-				id := ids[i]
-				err := storage.PutAny(&devices.Device{
-					Resource: resource.Resource{ID: id},
-					Name:     fmt.Sprintf("Hot %d'th %d", j, i),
-				})
-				numRevs++
-				numHots++
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
+	before := time.Now()
+	for i := 0; i < len(ids); i++ {
+		id := ids[i]
+		_, err := storage.GetAny(id)
+		if err != nil {
+			t.Fatal(err)
 		}
+	}
+	after := time.Now()
 
-		afterHots := time.Now()
-		hotTotal := afterHots.Sub(afterUpdates) / time.Millisecond
-		perHot := float64(hotTotal) / float64(numHots)
-		fmt.Printf("%fms per hot update after %d revisions over %d resources\n", perHot, numRevs, len(ids))
+	getTotal := after.Sub(before) / time.Millisecond
+	perGet := float64(getTotal) / float64(len(ids))
+	fmt.Printf("%fms per get after %d revisions over %d resources\n", perGet, numRevs, len(ids))
 
-		before := time.Now()
-		for i := 0; i < len(ids); i++ {
-			id := ids[i]
-			_, err := storage.GetAny(id)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-		after := time.Now()
-
-		getTotal := after.Sub(before) / time.Millisecond
-		perGet := float64(getTotal) / float64(len(ids))
-		fmt.Printf("%fms per get after %d revisions over %d resources\n", perGet, numRevs, len(ids))
-
-		require.NotNil(t, nil)
-	})
+	require.NotNil(t, nil)
 
 }
